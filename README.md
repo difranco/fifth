@@ -51,10 +51,154 @@ propagate data when a control flag is false. This is also the main form of seman
 and the corresponding flag must arrive together. This means it should be used in a pattern like filters in list-oriented 
 programming, where a predicate is run on each datum to determine whether it is kept.
 
+### Functional unit specifications
+
+All these assume a word size to be established. There may be different word sizes in a single unit, in which case
+an additional unit type should be defined to convert from groups of smaller words to larger words and back.
+
+The fixed operations can be implemented as combinatorial logic or a hardware LUT. LUT may make more sense for e.g. 
+multiplication and division, especially with a number representation such as Type 2 unums. The LUT type unit can be loaded 
+with a custom LUT.
+
+All ports are mapped to addresses in a uniform address space. If there are small and large word sizes, for example bytes and 
+32-bit words, the small size can be used for register-like addressing and the large size for memory-like addressing. But 
+typically, in RISC style, connect operations will use the short address length, or a custom length, and all others will use 
+the long word for operations.
+
+In a multi-core setup, most or all of the larger address space should be shared among cores.
+
+#### Single instruction: Connect
+
+Instruction specifies a source address and a destination address.
+Upon execution, addresses are connected.
+
+We may consider allowing connections to be made between any pair of addresses, including memory addresses, which could be 
+used to implement fan-out in an alternative way to the fanout unit below, and could be backed by a routing table. This could 
+also be the primary or only mechanism for core to core communication.
+
+Variants
+
+* Both addresses are short (register-register style)
+* Both addresses long (memory-memory style)
+* One address is short and the other long (register-memory style)
+
+#### Adder
+
+Input ports: two words to be added
+Output ports: sum word and carry word (essentially upper and lower halves of sum)
+
+Once words arrive on both inputs, consumes and sums them and publishes sum on output ports.
+
+#### Multiplier
+
+Input ports: two words to be multiplied
+Output ports: four words of the product
+
+Once words arrive on both inputs, consume them and publish the product on the output ports.
+
+#### Divider
+
+As multiplier, but for division.
+
+Has eight output ports, four for quotient and four for remainder.
+
+#### Subtracter
+
+As adder, but for subtraction.
+
+#### Negater
+
+Input port: one word to be negated.
+Output port: negated word.
+
+When input arrives, consume it and publish negation on output.
+
+#### Bitwises
+
+All have one  or two words as input and one word output as appropriate.
+
+* And
+* Or
+* Not
+* Nand
+* Nor
+
+#### Look Up Tables
+
+LUTs have 1-2 input ports and 1-8 output ports.
+
+In addition, they have a set of input ports, which number in the size of an input word to the power of the number of input 
+ports times the number of output ports. When the location(s) at the offset of an input port are written with the outputs, 
+therafter the LUT returns the given output for that input.
+
+Variant: To save address space, the input ports to set the LUT may accept input-output tuples. Then, there will be a set of 
+2-10 ports to compute, and a set of the same number of ports to revise entries in the LUT.
+
+#### Filter
+
+Input ports: N inputs, and 1 flag word
+Output ports: N outputs
+
+When a flag word arrives on the flag input, the filter copies any inputs which have arrived to the corresponding outputs if 
+the flag is nonzero, else it discards them.
+
+Variant: the filter waits for all inputs to arrive before proceeding.
+
+#### Fanout
+
+1-way variant
+
+Input port: a word
+
+Output ports: two copies of the word
+
+N-way variant
+
+Input ports: a word and an integer n specifying how many copies to make (up to a bound N fixed in the hardware)
+
+Output ports: N words
+
+When a word to be copied and n both arrive, publishes n copies on the first n output ports.
+Discards both inputs if n < 1 or n > N.
+
+#### Fetcher
+
+Input ports: a source address and a synchronization flag
+
+When the source address is set, fetches and executes the instruction at that address, and increments the source address. If 
+the synchonization flag is set to a nonzero value, waits until it is not before fetching another instruction, else 
+immediately fetches and executes another (will still block if target ports of that connection are occupied).
+
+Instruction may specify that the synchronization flag be set or cleared.
+
+Instruction format is (synchronization flag, source to connect, target to connect), with short or long addresses for either, 
+or (synchronization flag, constant to load, target address to load).
+
+#### Loader
+
+Input ports: A target address, a base address, a count, and a stride.
+Output ports: None
+
+When the target address and base address are set, checks whether the count and stride are also set. If count is set, copies 
+a block of size count starting at base address to target address. If stride is also set, increments base address by stride 
+instead of by 1 between copying each word. At the end, base address is at the position of what the next address to be copied 
+would have been with the given stride, and target address remains as it was.
+
+#### Storer
+
+Input ports: A word to store, a target address, and a stride.
+Output ports: None
+
+When a word to store arrives and target address is set, consumes and copies the word to target address, and increments the 
+target address by stride if set, else by one.
+
 ### Architecture advantages
 
-The main advantage over a VLIW architecture, which it resembles, is that it is self-scheduling.
+The main advantages over a VLIW architecture, which it resembles, is that redundant instructions need not be repeated in 
+unchanging data flows. Secondarily, it is to some extent self-scheduling.
+
 The main advantage over a CPU is that it can be programmed in SIMD style for essentially unbounded amounts of data.
+
 The main advantage over a GPU is that it can accomodate arbitrarily complex control flow as well as a CPU without giving up
 the ability to exploit lack of control flow.
 
@@ -64,8 +208,13 @@ style with the corresponding benefits.
 
 ### VM interpreter
 
-pass
+WIP
 
-## Language
+## High-level Language
 
-Described in papers for PLP 2017 and 2018, to be summarized here.
+Architecture described in papers for PLP 2017 and 2018, to be summarized here.
+
+Links:
+
+* “Information-gain computation” https://arxiv.org/abs/1707.01550
+* “Information-relational semantics of the Fifth system” TODO post draft
