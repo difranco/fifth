@@ -70,8 +70,10 @@ end
 end
 
 function unimodalDist(data :: BitMatrix, smooth = 0)
-	counts = bound.(sum(data, dims = 2) ./ Float16(size(data)[2]), smooth, 1 - smooth)
-	return counts
+	numrows = size(data)[2]
+	rowcounts = sum(data, dims = 2)
+	probabilities = bound.(Float16.(rowcounts) ./ numrows, smooth, 1 - smooth)
+	return probabilities
 end
 
 import Distributions.Bernoulli
