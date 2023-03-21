@@ -15,58 +15,75 @@ export ParameterPopulation, adapt, diversity
 
 #!("./src/" in LOAD_PATH) ? push!(LOAD_PATH, "./src/")
 
+@inline makepointers(numSamples) = collect(Int16, 1:numSamples)
+
+# given pointers[i] points to the parameter vector with the ith rank in fitness f
+# below we swap indices with ranks and sort by index and put ranks into ranks matrix
+# should check to see if this is a noop on the corresponding permutation (cyclic?)
+@inline sortedPointersToRanks(pointers) = map(t -> t[2], sort(reverse.(collect(enumerate(pointers)))))
+
 struct ParameterPopulation
-	parameters :: AbstractMatrix
+	parameters :: BitMatrix
 	fitnesses :: Vector{Function}
+	fitnessresults :: Matrix{Float16}
+	rankpointersbyfitness :: Matrix{Int16}
+	rankpointers :: Vector{Int16}
 end
 
-@inline topCalc(n) = Int(floor(sqrt(n)))
-
-function adapt(p :: ParameterPopulation;
-	             diversity = false, agg :: Function = sum)
-	numSamples = size(p.parameters)[2]
+function ParameterPopulation(parameters, fitnesses; pdiversity = false, rdiversity = false)
+	numSamples = size(parameters)[2]
 	top = topCalc(numSamples)
-	middle = div(numSamples, 3)
 
-	if diversity
-		fitnesses = copy(p.fitnesses)
-		push!(fitnesses, (v) -> maximum(agg(v .⊻ p.parameters[:, 1:top], dims=1))) #make sure applied when parameters sorted
-	else
-		fitnesses = p.fitnesses
+	if pdiversity
+		push!(fitnesses, (v) -> maximum(sum(v .⊻ parameters[:, rankpointers[1:top]], dims=1)))
+	end
+	if rdiversity
+		push!(fitnesses, (v) -> maximum(sum(abs.(v .- rankpointers[[1:top]]))))
 	end
 
 	numFitnesses = length(fitnesses)
 
-	makepointers() = collect(Int16, 1:numSamples)
-
 	fitnessresults = zeros(Float16, numFitnesses, numSamples)
-	
-	for f in 1:numFitnesses, s in 1:numSamples
-		pvec = p.parameters[:, s]
+	rankpointersbyfitness = zeros(Int16, numFitnesses, numSamples)
+
+	for f in 1:numFitnesses
+		rankpointersbyfitness[f,:] = makepointers(numSamples)
+	end
+	rankpointers = makepointers(numSamples)
+
+	ParameterPopulation(parameters, fitnesses, fitnessresults, rankpointersbyfitness, rankpointers)
+end
+
+@inline topCalc(n) = Int(ceil(sqrt(n)))
+
+function adapt(p :: ParameterPopulation; agg :: Function = sum)
+	numSamples = size(p.parameters)[2]
+	numFitnesses = length(p.fitnesses)
+
+	top = topCalc(numSamples)
+	middle = div(numSamples, 3)
+
+	for f in 1:numFitnesses, r in p.rankpointers
+		pvec = p.parameters[:, r]
 		try
-			fitnessresults[f,s] = fitnesses[f](pvec)
+			p.fitnessresults[f,r] = p.fitnesses[f](pvec)
 		catch e
-			# leave fitness zero
-			@debug "Fitness $f failed with $e on sample $s with value " pvec
+			p.fitnessresults[f,r] = 0
+			@debug "Fitness $f failed with $e on sample ranked $r with value " pvec
 		end
 	end
 
-	ranks = fill(Int16(0), numFitnesses, numSamples)
-
 	for f in 1:numFitnesses
-		pointers = makepointers()
+		pointers = p.rankpointersbyfitness[f,:]
 		sort!(pointers,
-		  by = (pointer) -> fitnessresults[f, pointer],
+		  by = (pointer) -> p.fitnessresults[f, pointer],
 		  rev = true)
-		# pointers[i] now points to the parameter vector with the ith rank in fitness f
-		pointerranks = map(t -> t[2], sort(reverse.(collect(enumerate(pointers)))))
-		ranks[f, :] = pointerranks
 	end
 
-	pointers = makepointers()
+	pointers = p.rankpointers
 
 	sort!(pointers,
-		by = (pointer) -> agg(ranks[:, pointer]),
+		by = (pointer) -> agg(p.rankpointersbyfitness[:, pointer]),
 		rev = false)
 
 	# fit top
@@ -75,11 +92,6 @@ function adapt(p :: ParameterPopulation;
 	# replace bottom
 	resamples = sampleBernoulli(dist, numSamples - middle + 1)
 	p.parameters[:, pointers[middle : end]] = resamples
-	unsortedparameters = copy(p.parameters)
-
-	for (i, pointer) in enumerate(pointers)
-		p.parameters[:, i] = unsortedparameters[:, pointer]
-	end
 
 	return p
 end
