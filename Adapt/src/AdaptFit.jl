@@ -30,21 +30,30 @@ struct ParameterPopulation
 	rankpointers :: Vector{Int16}
 end
 
-function ParameterPopulation(parameters, fitnesses; pdiversity = false, rdiversity = false)
+function ParameterPopulation(parameters :: BitMatrix, fitnesses :: Vector{Function};
+	  pdiversity = false, rdiversity = false)
 	numSamples = size(parameters)[2]
 	top = topCalc(numSamples)
 
-	if pdiversity
-		push!(fitnesses, (v) -> maximum(sum(v .⊻ parameters[:, rankpointers[1:top]], dims=1)))
-	end
-	if rdiversity
-		push!(fitnesses, (v) -> maximum(sum(abs.(v .- rankpointers[[1:top]]))))
-	end
-
-	numFitnesses = length(fitnesses)
-
+	numFitnesses = length(fitnesses) + sum([pdiversity, rdiversity])
 	fitnessresults = zeros(Float16, numFitnesses, numSamples)
 	rankpointersbyfitness = zeros(Int16, numFitnesses, numSamples)
+
+	for (i, f) in enumerate(fitnesses)
+		fitnesses[i] = (v :: BitVector, s :: Int) -> f(v)
+	end
+
+	if pdiversity
+		@inline parameterdiff(v :: BitVector) = v .⊻ parameters[:, rankpointers[1:top]]
+		parameterdiversity = (v :: BitVector, s :: Int) -> minimum(sum(parameterdiff(v), dims = 2))
+		push!(fitnesses, parameterdiversity)
+	end
+	if rdiversity
+		rpf = rankpointersbyfitness
+		@inline fitrankdiff = (s :: Int) -> rpf[:, s] .- rpf[:, rankpointers[1:top]]
+		rankdiversity = (v :: BitVector, s :: Int) -> minimum(sum(abs.(fitrankdiff(s)), dims = 2))
+		push!(fitnesses, rankdiversity)
+	end
 
 	for f in 1:numFitnesses
 		rankpointersbyfitness[f,:] = makepointers(numSamples)
@@ -63,13 +72,13 @@ function adapt(p :: ParameterPopulation; agg :: Function = sum)
 	top = topCalc(numSamples)
 	middle = div(numSamples, 3)
 
-	for f in 1:numFitnesses, r in p.rankpointers
-		pvec = p.parameters[:, r]
+	for f in 1:numFitnesses, s in 1:numSamples
+		pvec = p.parameters[:, s]
 		try
-			p.fitnessresults[f,r] = p.fitnesses[f](pvec)
+			p.fitnessresults[f,s] = p.fitnesses[f](pvec, s)
 		catch e
-			p.fitnessresults[f,r] = 0
-			@debug "Fitness $f failed with $e on sample ranked $r with value " pvec
+			p.fitnessresults[f,s] = 0
+			@info "Fitness $f failed with $e on sample $s with value " pvec
 		end
 	end
 

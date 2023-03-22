@@ -12,7 +12,7 @@ using Adapt.Fit:unimodalDist
 using Adapt.AdaptFit:ParameterPopulation,adapt
 
 dimension = 16
-numSamples = 108
+numSamples = 25 # 108
 
 # topCalc = (n) -> max(Int(floor(n/8)), 3)
 # uniform = ones{Float16}(dimension, 1) ./ 2
@@ -31,22 +31,38 @@ function testWordFit(fitnesses)
 	parameters = BitMatrix(rand(rng, Bool, dimension, numSamples))
 	p = ParameterPopulation(parameters, fitnesses, pdiversity = true, rdiversity = true)
 
-	top10 = p.parameters[1:10]
+	top10 = p.parameters[:, p.rankpointers[1:10]]
 	lasttop10 = top10
+	epochnochangecount = 0
+
 	for i in 1:1000
 		p = adapt(p)
-		if i % 5 != 0 continue end
-		top10 = p.parameters[1:10]
+		top10 = p.parameters[:, p.rankpointers[1:10]]
 		diff = lasttop10 .⊻ top10
 		lasttop10 = copy(top10)
-		@info "Iteration $i"
-		if i < 888 continue end
-		@info "Change count: $(sum(diff))"
-		topfitness = sum(p.fitnessresults[:, p.rankpointers[1]])
-		@info "Top fitness: $topfitness"
+		changecount = sum(diff)
+		if changecount == 0 epochnochangecount += 1 end
+
+		function printStatus()
+			@info "Iteration $i"
+			@info "Change count: $(changecount)"
+			topfitness = sum(p.fitnessresults[:, p.rankpointers[1]])
+			@info "Top fitness: $topfitness"
+		end
+
+		if epochnochangecount > 4
+			printStatus()
+			break
+		end
+
+		if i % 5 == 0
+			printStatus()
+			continue
+		end
 	end
 
-	@info "End top 20 " p.parameters[:, p.rankpointers[1:20]]
+	# @info "End top 20 " p.parameters[:, p.rankpointers[1:20]]
+	@info p
 end
 
 # @info "End sample discrepancy: $(sum(abs.(unimodalDist(p.parameters) - criterion)))"
