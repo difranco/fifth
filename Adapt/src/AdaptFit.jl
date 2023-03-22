@@ -84,16 +84,13 @@ function adapt(p :: ParameterPopulation; agg :: Function = sum)
 
 	for f in 1:numFitnesses
 		pointers = p.rankpointersbyfitness[f,:]
-		sort!(pointers,
-		  by = (pointer) -> p.fitnessresults[f, pointer],
-		  rev = true)
+		p.rankpointersbyfitness[f,:] = sort(pointers, by = (pointer) -> p.fitnessresults[f, pointer],
+		  rev = true) # TODO: see how to make this work in place. previous attempts failed.
 	end
 
 	pointers = p.rankpointers
-
-	sort!(pointers,
-		by = (pointer) -> agg(p.rankpointersbyfitness[:, pointer]),
-		rev = false)
+	p.rankpointers[:] = sort(pointers, by = (pointer) -> agg(p.rankpointersbyfitness[:, pointer]),
+		rev = false) # TODO: see how to make this work in place. previous attempts failed.
 
 	# fit top
 	dist = unimodalDist(p.parameters[:, pointers[1:top]], 0.01)

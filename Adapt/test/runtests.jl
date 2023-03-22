@@ -12,7 +12,7 @@ using Adapt.Fit:unimodalDist
 using Adapt.AdaptFit:ParameterPopulation,adapt
 
 dimension = 16
-numSamples = 25 # 108
+numSamples = 108
 
 # topCalc = (n) -> max(Int(floor(n/8)), 3)
 # uniform = ones{Float16}(dimension, 1) ./ 2
@@ -29,19 +29,23 @@ bitmatchfitness = (x) -> length(criterion) - sum(x .⊻ matchcriterion)
 
 function testWordFit(fitnesses)
 	parameters = BitMatrix(rand(rng, Bool, dimension, numSamples))
-	p = ParameterPopulation(parameters, fitnesses, pdiversity = true, rdiversity = true)
+	p = ParameterPopulation(parameters, fitnesses, pdiversity = false, rdiversity = true)
 
 	top10 = p.parameters[:, p.rankpointers[1:10]]
 	lasttop10 = top10
 	epochnochangecount = 0
 
-	for i in 1:1000
+	for i in 1:10000
 		p = adapt(p)
 		top10 = p.parameters[:, p.rankpointers[1:10]]
 		diff = lasttop10 .⊻ top10
 		lasttop10 = copy(top10)
 		changecount = sum(diff)
-		if changecount == 0 epochnochangecount += 1 end
+		if changecount == 0
+			epochnochangecount += 1
+		else
+			epochnochangecount = 0
+		end
 
 		function printStatus()
 			@info "Iteration $i"
@@ -55,7 +59,7 @@ function testWordFit(fitnesses)
 			break
 		end
 
-		if i % 5 == 0
+		if i % 50 == 0
 			printStatus()
 			continue
 		end
