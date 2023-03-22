@@ -29,19 +29,18 @@ bitmatchfitness = (x) -> length(criterion) - sum(x .⊻ matchcriterion)
 
 function testWordFit(fitnesses)
 	parameters = BitMatrix(rand(rng, Bool, dimension, numSamples))
-	p = ParameterPopulation(parameters, fitnesses, pdiversity = false, rdiversity = true)
+	p = ParameterPopulation(parameters, fitnesses, pdiversity = false, rdiversity = false)
 
-	top10 = p.parameters[:, p.rankpointers[1:10]]
-	lasttop10 = top10
+	top1 = p.rankpointersbyfitness[:, p.rankpointers[1]]
+	lasttop1 = top1
 	epochnochangecount = 0
 
-	for i in 1:10000
+	for i in 1:100000
 		p = adapt(p)
-		top10 = p.parameters[:, p.rankpointers[1:10]]
-		diff = lasttop10 .⊻ top10
-		lasttop10 = copy(top10)
-		changecount = sum(diff)
-		if changecount == 0
+		top1 = p.rankpointersbyfitness[:, p.rankpointers[1]]
+		diff = sum(abs.(lasttop1 .- top1))
+		lasttop1 = copy(top1)
+		if diff == 0
 			epochnochangecount += 1
 		else
 			epochnochangecount = 0
@@ -49,9 +48,9 @@ function testWordFit(fitnesses)
 
 		function printStatus()
 			@info "Iteration $i"
-			@info "Change count: $(changecount)"
-			topfitness = sum(p.fitnessresults[:, p.rankpointers[1]])
-			@info "Top fitness: $topfitness"
+			@info "Diff: $(diff)"
+			@info "Top fitness ranks: $top1"
+			@info "Top sample $(p.parameters[:, p.rankpointers[1]])"
 		end
 
 		if epochnochangecount > 4
@@ -59,14 +58,13 @@ function testWordFit(fitnesses)
 			break
 		end
 
-		if i % 50 == 0
+		if i % 2500 == 0
 			printStatus()
 			continue
 		end
 	end
 
-	# @info "End top 20 " p.parameters[:, p.rankpointers[1:20]]
-	@info p
+	# @info p
 end
 
 # @info "End sample discrepancy: $(sum(abs.(unimodalDist(p.parameters) - criterion)))"

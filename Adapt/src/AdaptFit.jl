@@ -78,7 +78,7 @@ function adapt(p :: ParameterPopulation; agg :: Function = sum)
 			p.fitnessresults[f,s] = p.fitnesses[f](pvec, s)
 		catch e
 			p.fitnessresults[f,s] = 0
-			@info "Fitness $f failed with $e on sample $s with value " pvec
+			@debug "Fitness $f failed with $e on sample $s with value " pvec
 		end
 	end
 
@@ -93,7 +93,7 @@ function adapt(p :: ParameterPopulation; agg :: Function = sum)
 		rev = false) # TODO: see how to make this work in place. previous attempts failed.
 
 	# fit top
-	dist = unimodalDist(p.parameters[:, pointers[1:top]], 0.01)
+	dist = unimodalDist(p.parameters[:, pointers[1:top]], 0.005)
 
 	# replace bottom
 	resamples = sampleBernoulli(dist, numSamples - middle + 1)
